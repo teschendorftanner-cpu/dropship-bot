@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["chromium", "playwright-driver"]
+nixPkgs = ["chromium", "nss", "nspr", "atk", "cups", "dbus", "expat", "libdrm", "libxkbcommon", "mesa", "libgbm", "alsa-lib", "at-spi2-atk", "at-spi2-core", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libxcb", "pango", "cairo", "glib"]
 
 [phases.install]
 cmds = [
