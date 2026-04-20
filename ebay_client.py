@@ -43,36 +43,24 @@ async def _login(context):
     logger.info("eBay login successful.")
 
 
-# ── Research (scrape eBay sold listings — no API key needed) ──────────────────
+# ── Research (scrape eBay sold listings via Playwright) ───────────────────────
 
-def get_sold_median(keyword: str) -> float | None:
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
-        ),
-        "Accept-Language": "en-US,en;q=0.9",
-    }
-    params = {
-        "q": keyword,
-        "LH_Sold": "1",
-        "LH_Complete": "1",
-        "rt": "nc",
-        "_sop": "13",
-    }
+async def get_sold_median_async(keyword: str) -> float | None:
+    context = await _get_context()
+    page = await context.new_page()
     try:
-        resp = requests.get(
-            "https://www.ebay.com/sch/i.html",
-            params=params,
-            headers=headers,
-            timeout=15
+        url = (
+            f"https://www.ebay.com/sch/i.html"
+            f"?q={requests.utils.quote(keyword)}&LH_Sold=1&LH_Complete=1&rt=nc&_sop=13"
         )
-        soup = BeautifulSoup(resp.text, "lxml")
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        await page.wait_for_timeout(2000)
+
+        content = await page.content()
+        soup = BeautifulSoup(content, "lxml")
         prices = []
         for span in soup.select("span.s-item__price"):
             text = span.get_text()
-            # Handle price ranges like "$10.00 to $20.00" — take lower
             match = re.search(r"\$(\d+\.?\d*)", text)
             if match:
                 try:
@@ -90,6 +78,23 @@ def get_sold_median(keyword: str) -> float | None:
         return median
     except Exception as e:
         logger.error(f"eBay scrape error for '{keyword}': {e}")
+        return None
+    finally:
+        await page.close()
+
+
+def get_sold_median(keyword: str) -> float | None:
+    """Sync wrapper — runs async scrape in event loop."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, get_sold_median_async(keyword))
+                return future.result(timeout=45)
+        return loop.run_until_complete(get_sold_median_async(keyword))
+    except Exception as e:
+        logger.error(f"get_sold_median error for '{keyword}': {e}")
         return None
 
 
