@@ -1,5 +1,6 @@
 import logging
 import statistics
+import time
 from config import MIN_MARGIN_PERCENT, MARKUP_PERCENT, EBAY_FEE_PERCENT, MAX_LISTINGS
 from cj_client import search_products, get_shipping_cost
 from ebay_client import get_sold_median
@@ -51,6 +52,7 @@ def research_products(keywords: list[str] = None, max_per_keyword: int = 5) -> l
             break
 
         logger.info(f"Researching: '{keyword}'")
+        time.sleep(1.5)  # stay within eBay API rate limit
         ebay_median = get_sold_median(keyword)
         if not ebay_median:
             logger.info(f"  No eBay sold data for '{keyword}'")
