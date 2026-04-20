@@ -5,7 +5,7 @@ import statistics
 import requests
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, TimeoutError as PWTimeout
-from config import EBAY_EMAIL, EBAY_PASSWORD
+from config import EBAY_EMAIL, EBAY_PASSWORD, EBAY_APP_ID, EBAY_FINDING_URL
 
 logger = logging.getLogger(__name__)
 
@@ -43,32 +43,43 @@ async def _login(context):
     logger.info("eBay login successful.")
 
 
-# ── Research (scrape eBay sold listings via Playwright) ───────────────────────
+# ── Research (eBay Finding API) ───────────────────────────────────────────────
 
-async def get_sold_median_async(keyword: str) -> float | None:
-    context = await _get_context()
-    page = await context.new_page()
+def get_sold_median(keyword: str) -> float | None:
+    params = {
+        "OPERATION-NAME": "findCompletedItems",
+        "SERVICE-VERSION": "1.0.0",
+        "SECURITY-APPNAME": EBAY_APP_ID,
+        "RESPONSE-DATA-FORMAT": "JSON",
+        "REST-PAYLOAD": "",
+        "keywords": keyword,
+        "itemFilter(0).name": "SoldItemsOnly",
+        "itemFilter(0).value": "true",
+        "paginationInput.entriesPerPage": "100",
+    }
     try:
-        url = (
-            f"https://www.ebay.com/sch/i.html"
-            f"?q={requests.utils.quote(keyword)}&LH_Sold=1&LH_Complete=1&rt=nc&_sop=13"
+        resp = requests.get(EBAY_FINDING_URL, params=params, timeout=20)
+        data = resp.json()
+
+        if "errorMessage" in data:
+            msg = data["errorMessage"][0]["error"][0]["message"][0]
+            logger.error(f"eBay API error for '{keyword}': {msg}")
+            return None
+
+        items = (
+            data["findCompletedItemsResponse"][0]
+                ["searchResult"][0]
+                .get("item", [])
         )
-        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        await page.wait_for_timeout(2000)
-
-        content = await page.content()
-        soup = BeautifulSoup(content, "lxml")
         prices = []
-        for span in soup.select("span.s-item__price"):
-            text = span.get_text()
-            match = re.search(r"\$(\d+\.?\d*)", text)
-            if match:
-                try:
-                    prices.append(float(match.group(1)))
-                except ValueError:
-                    continue
+        for item in items:
+            try:
+                p = float(item["sellingStatus"][0]["convertedCurrentPrice"][0]["__value__"])
+                if p > 0:
+                    prices.append(p)
+            except (KeyError, IndexError, ValueError):
+                continue
 
-        prices = [p for p in prices if p > 1]
         if len(prices) < 5:
             logger.info(f"Not enough sold data for '{keyword}' ({len(prices)} results)")
             return None
@@ -77,24 +88,7 @@ async def get_sold_median_async(keyword: str) -> float | None:
         logger.info(f"'{keyword}': median sold=${median:.2f} from {len(prices)} listings")
         return median
     except Exception as e:
-        logger.error(f"eBay scrape error for '{keyword}': {e}")
-        return None
-    finally:
-        await page.close()
-
-
-def get_sold_median(keyword: str) -> float | None:
-    """Sync wrapper — runs async scrape in event loop."""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, get_sold_median_async(keyword))
-                return future.result(timeout=45)
-        return loop.run_until_complete(get_sold_median_async(keyword))
-    except Exception as e:
-        logger.error(f"get_sold_median error for '{keyword}': {e}")
+        logger.error(f"eBay API error for '{keyword}': {e}")
         return None
 
 

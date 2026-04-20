@@ -6,6 +6,9 @@ load_dotenv()
 # eBay account
 EBAY_EMAIL = os.getenv("EBAY_EMAIL", "")
 EBAY_PASSWORD = os.getenv("EBAY_PASSWORD", "")
+EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
+
+EBAY_FINDING_URL = "https://svcs.ebay.com/services/search/FindingService/v1"
 
 # CJ Dropshipping (free at app.cjdropshipping.com)
 CJ_EMAIL = os.getenv("CJ_EMAIL", "")
