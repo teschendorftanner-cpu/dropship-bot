@@ -1,9 +1,11 @@
 import asyncio
 import logging
 import re
+import statistics
 import requests
+from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, TimeoutError as PWTimeout
-from config import EBAY_APP_ID, EBAY_EMAIL, EBAY_PASSWORD, EBAY_FINDING_URL
+from config import EBAY_EMAIL, EBAY_PASSWORD
 
 logger = logging.getLogger(__name__)
 
@@ -41,41 +43,53 @@ async def _login(context):
     logger.info("eBay login successful.")
 
 
-# ── Research (Finding API — only needs App ID) ────────────────────────────────
+# ── Research (scrape eBay sold listings — no API key needed) ──────────────────
 
 def get_sold_median(keyword: str) -> float | None:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+    }
     params = {
-        "OPERATION-NAME": "findCompletedItems",
-        "SERVICE-VERSION": "1.0.0",
-        "SECURITY-APPNAME": EBAY_APP_ID,
-        "RESPONSE-DATA-FORMAT": "JSON",
-        "REST-PAYLOAD": "",
-        "keywords": keyword,
-        "itemFilter(0).name": "SoldItemsOnly",
-        "itemFilter(0).value": "true",
-        "paginationInput.entriesPerPage": "100",
+        "q": keyword,
+        "LH_Sold": "1",
+        "LH_Complete": "1",
+        "rt": "nc",
+        "_sop": "13",
     }
     try:
-        resp = requests.get(EBAY_FINDING_URL, params=params, timeout=15)
-        items = (
-            resp.json()["findCompletedItemsResponse"][0]
-                       ["searchResult"][0]
-                       .get("item", [])
+        resp = requests.get(
+            "https://www.ebay.com/sch/i.html",
+            params=params,
+            headers=headers,
+            timeout=15
         )
+        soup = BeautifulSoup(resp.text, "lxml")
         prices = []
-        for item in items:
-            try:
-                p = float(item["sellingStatus"][0]["convertedCurrentPrice"][0]["__value__"])
-                if p > 0:
-                    prices.append(p)
-            except (KeyError, IndexError, ValueError):
-                continue
+        for span in soup.select("span.s-item__price"):
+            text = span.get_text()
+            # Handle price ranges like "$10.00 to $20.00" — take lower
+            match = re.search(r"\$(\d+\.?\d*)", text)
+            if match:
+                try:
+                    prices.append(float(match.group(1)))
+                except ValueError:
+                    continue
+
+        prices = [p for p in prices if p > 1]
         if len(prices) < 5:
+            logger.info(f"Not enough sold data for '{keyword}' ({len(prices)} results)")
             return None
-        prices.sort()
-        return prices[len(prices) // 2]
+
+        median = statistics.median(prices)
+        logger.info(f"'{keyword}': median sold=${median:.2f} from {len(prices)} listings")
+        return median
     except Exception as e:
-        logger.error(f"eBay sold price error for '{keyword}': {e}")
+        logger.error(f"eBay scrape error for '{keyword}': {e}")
         return None
 
 

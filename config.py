@@ -6,7 +6,6 @@ load_dotenv()
 # eBay account
 EBAY_EMAIL = os.getenv("EBAY_EMAIL", "")
 EBAY_PASSWORD = os.getenv("EBAY_PASSWORD", "")
-EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
 
 # CJ Dropshipping (free at app.cjdropshipping.com)
 CJ_EMAIL = os.getenv("CJ_EMAIL", "")
@@ -25,5 +24,3 @@ MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "50"))
 RESEARCH_INTERVAL_HOURS = float(os.getenv("RESEARCH_INTERVAL_HOURS", "6"))
 PRICE_SYNC_INTERVAL_HOURS = float(os.getenv("PRICE_SYNC_INTERVAL_HOURS", "2"))
 ORDER_POLL_MINUTES = int(os.getenv("ORDER_POLL_MINUTES", "10"))
-
-EBAY_FINDING_URL = "https://svcs.ebay.com/services/search/FindingService/v1"
