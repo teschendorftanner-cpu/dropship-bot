@@ -77,9 +77,10 @@ async def cmd_research(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     lines = [f"✅ Found *{len(found)}* products ready to list:\n"]
     for p in found[:8]:
+        cost = p.get('total_cost') or p.get('walmart_price') or 0
         lines.append(
             f"• {p['title'][:50]}\n"
-            f"  Walmart ${p['walmart_price']:.2f} → eBay ${p['ebay_price']:.2f} "
+            f"  Cost ${cost:.2f} → eBay ${p['ebay_price']:.2f} "
             f"({p['margin_percent']:.1f}% margin)"
         )
     lines.append("\nRun /list to create eBay listings.")
