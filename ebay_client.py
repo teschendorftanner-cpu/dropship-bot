@@ -72,6 +72,20 @@ async def create_listing(title: str, description: str, price: float,
     <PostalCode>10001</PostalCode>
     <Location>United States</Location>
     <Quantity>10</Quantity>
+    <ItemSpecifics>
+      <NameValueList>
+        <Name>Brand</Name>
+        <Value>Unbranded</Value>
+      </NameValueList>
+      <NameValueList>
+        <Name>Color</Name>
+        <Value>As Shown</Value>
+      </NameValueList>
+      <NameValueList>
+        <Name>Type</Name>
+        <Value>Other</Value>
+      </NameValueList>
+    </ItemSpecifics>
     <ReturnPolicy>
       <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
       <RefundOption>MoneyBack</RefundOption>
@@ -82,8 +96,9 @@ async def create_listing(title: str, description: str, price: float,
       <ShippingType>Flat</ShippingType>
       <ShippingServiceOptions>
         <ShippingServicePriority>1</ShippingServicePriority>
-        <ShippingService>ShippingMethodStandard</ShippingService>
+        <ShippingService>USPSFirstClass</ShippingService>
         <ShippingServiceCost>0.00</ShippingServiceCost>
+        <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
         <FreeShipping>true</FreeShipping>
       </ShippingServiceOptions>
     </ShippingDetails>
