@@ -1,4 +1,5 @@
 import logging
+import re
 from database import get_ready_products, save_listing, mark_product_listed
 from ebay_client import create_listing
 
@@ -23,12 +24,29 @@ CATEGORY_MAP = {
     "pet": "1281",
     "lamp": "112581",
     "light": "112581",
-    "speaker": "14969",
-    "earbuds": "14969",
-    "headset": "14969",
+    "speaker": "293",
+    "earbuds": "293",
+    "headset": "293",
+    "bluetooth": "293",
     "watch": "31387",
     "default": "11700",
 }
+
+
+_BRAND_PATTERNS = re.compile(
+    r'\b(shein|temu|aliexpress|amazon|walmart|alibaba|cross.?border)\b',
+    re.IGNORECASE,
+)
+_FILLER_PATTERNS = re.compile(
+    r'[-–]\s*(one pack|1 pack|1 pair|boxed|bag)\s*$',
+    re.IGNORECASE,
+)
+
+
+def _clean_title(title: str) -> str:
+    title = _BRAND_PATTERNS.sub('', title)
+    title = _FILLER_PATTERNS.sub('', title)
+    return ' '.join(title.split()).strip(' -–,')[:80]
 
 
 def _guess_category(title: str) -> str:
@@ -57,12 +75,13 @@ async def list_ready_products(limit: int = 10) -> list[dict]:
     listed = []
 
     for p in products:
-        logger.info(f"Listing: {p['title'][:60]}")
-        category_id = _guess_category(p["title"])
-        description = _build_description(p["title"])
+        title = _clean_title(p["title"])
+        logger.info(f"Listing: {title[:60]}")
+        category_id = _guess_category(title)
+        description = _build_description(title)
 
         ebay_item_id = await create_listing(
-            title=p["title"],
+            title=title,
             description=description,
             price=p["ebay_price"],
             image_url=p.get("image_url", ""),
