@@ -7,6 +7,7 @@ load_dotenv()
 EBAY_EMAIL = os.getenv("EBAY_EMAIL", "")
 EBAY_PASSWORD = os.getenv("EBAY_PASSWORD", "")
 EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
+EBAY_USER_TOKEN = os.getenv("EBAY_USER_TOKEN", "")
 
 EBAY_FINDING_URL = "https://svcs.ebay.com/services/search/FindingService/v1"
 
