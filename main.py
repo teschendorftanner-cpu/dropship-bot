@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import telegram.error
 from config import TELEGRAM_BOT_TOKEN, EBAY_EMAIL, CJ_EMAIL
 from bot import create_app, research_loop, order_loop, price_loop, send
 
@@ -55,7 +56,11 @@ async def main():
 
     async with app:
         await app.start()
-        await app.updater.start_polling(drop_pending_updates=True)
+        try:
+            await app.updater.start_polling(drop_pending_updates=True)
+        except telegram.error.Conflict:
+            logger.warning("Another bot instance is running — exiting so Railway restarts cleanly")
+            sys.exit(1)
         logger.info("✅ Dropship bot running. Open Telegram and send /start")
 
         await asyncio.gather(
