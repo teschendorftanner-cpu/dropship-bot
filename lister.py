@@ -19,17 +19,8 @@ CATEGORY_MAP = {
     "hair": "26395",
     "skin": "26395",
     "face": "26395",
-    "kitchen": "20625",
-    "home": "11700",
-    "pet": "1281",
-    "lamp": "112581",
-    "light": "112581",
-    "speaker": "293",
-    "earbuds": "293",
-    "headset": "293",
-    "bluetooth": "293",
     "watch": "31387",
-    "default": "11700",
+    "default": "112581",
 }
 
 
