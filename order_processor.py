@@ -4,7 +4,7 @@ from database import (
     get_active_listings, save_order, get_pending_orders,
     mark_order_fulfilled, mark_order_failed, log_profit
 )
-from ebay_client import get_new_orders
+from ebay_client import get_new_orders, mark_order_shipped
 from fulfillment import fulfill_order
 from config import EBAY_FEE_PERCENT
 
@@ -84,10 +84,18 @@ async def process_pending_orders() -> list[dict]:
         )
 
         if result["success"]:
-            mark_order_fulfilled(order["id"], result["order_id"], result.get("tracking", ""))
+            tracking = result.get("tracking", "")
+            mark_order_fulfilled(order["id"], result["order_id"], tracking)
             ebay_fee = order["sale_price"] * (EBAY_FEE_PERCENT / 100)
             net_profit = order["sale_price"] - ebay_fee - order["walmart_price"]
             log_profit(order["id"], order["sale_price"], order["walmart_price"], ebay_fee, net_profit)
+
+            shipped = await mark_order_shipped(order["ebay_order_id"], tracking_number=tracking)
+            if shipped:
+                logger.info(f"✅ Marked eBay order {order['ebay_order_id']} as shipped")
+            else:
+                logger.warning(f"⚠️ Could not mark eBay order {order['ebay_order_id']} as shipped — do it manually")
+
             results.append({
                 "success": True,
                 "ebay_order_id": order["ebay_order_id"],

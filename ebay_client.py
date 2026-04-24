@@ -130,6 +130,22 @@ async def revise_price(ebay_item_id: str, new_price: float) -> bool:
     return _ack(_call("ReviseFixedPriceItem", body))
 
 
+async def mark_order_shipped(ebay_order_id: str, tracking_number: str = "", carrier: str = "Other") -> bool:
+    tracking_xml = ""
+    if tracking_number:
+        tracking_xml = f"""
+  <Shipment>
+    <ShipmentTrackingDetails>
+      <ShippingCarrierUsed>{carrier}</ShippingCarrierUsed>
+      <ShipmentTrackingNumber>{tracking_number}</ShipmentTrackingNumber>
+    </ShipmentTrackingDetails>
+  </Shipment>"""
+    body = f"""
+  <OrderID>{ebay_order_id}</OrderID>
+  <Shipped>true</Shipped>{tracking_xml}"""
+    return _ack(_call("CompleteSale", body))
+
+
 async def end_listing(ebay_item_id: str) -> bool:
     body = f"""
   <ItemID>{ebay_item_id}</ItemID>
