@@ -11,6 +11,10 @@ TRADING_URL = "https://api.ebay.com/ws/api.dll"
 NS = "urn:ebay:apis:eBLBaseComponents"
 
 
+class DuplicateListing(Exception):
+    pass
+
+
 # ── Trading API helper ────────────────────────────────────────────────────────
 
 def _call(call_name: str, body: str) -> ET.Element | None:
@@ -115,6 +119,9 @@ async def create_listing(title: str, description: str, price: float,
 
     root = _call("AddFixedPriceItem", body)
     if not _ack(root):
+        for err in (root.findall(f".//{_ns('Errors')}") if root is not None else []):
+            if "Duplicate" in (err.findtext(_ns("ShortMessage")) or ""):
+                raise DuplicateListing()
         return None
     item_id = root.findtext(_ns("ItemID"))
     if item_id:

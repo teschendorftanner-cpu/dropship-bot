@@ -3,7 +3,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 
-DB_PATH = os.getenv("DB_PATH", "/data/dropship.db")
+DB_PATH = os.getenv("DB_PATH", "dropship.db")
 
 
 @contextmanager
@@ -22,7 +22,6 @@ def get_db():
 
 
 def init_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     with get_db() as db:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS products (

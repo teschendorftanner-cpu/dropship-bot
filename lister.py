@@ -1,7 +1,7 @@
 import logging
 import re
 from database import get_ready_products, save_listing, mark_product_listed
-from ebay_client import create_listing
+from ebay_client import create_listing, DuplicateListing
 
 logger = logging.getLogger(__name__)
 
@@ -142,13 +142,18 @@ async def list_ready_products(limit: int = 10) -> list[dict]:
 
         description = _build_description(title, image_urls)
 
-        ebay_item_id = await create_listing(
-            title=title,
-            description=description,
-            price=p["ebay_price"],
-            image_urls=image_urls,
-            category_id=category_id,
-        )
+        try:
+            ebay_item_id = await create_listing(
+                title=title,
+                description=description,
+                price=p["ebay_price"],
+                image_urls=image_urls,
+                category_id=category_id,
+            )
+        except DuplicateListing:
+            logger.info(f"  Already live on eBay, marking listed: {title[:50]}")
+            mark_product_listed(p["id"])
+            continue
 
         if not ebay_item_id:
             logger.warning(f"  Failed to list: {p['title'][:50]}")

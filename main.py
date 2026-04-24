@@ -2,7 +2,7 @@ import asyncio
 import logging
 import sys
 from config import TELEGRAM_BOT_TOKEN, EBAY_EMAIL, CJ_EMAIL
-from bot import create_app, research_loop, order_loop, price_loop
+from bot import create_app, research_loop, order_loop, price_loop, send
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -29,6 +29,26 @@ def check_config():
         sys.exit(1)
 
 
+async def startup_task(app):
+    """On every start, repopulate the DB so a fresh deploy never leaves the bot empty."""
+    await asyncio.sleep(8)  # let Telegram polling settle first
+    logger.info("[Startup] Auto-research starting...")
+    try:
+        from research import research_products
+        from lister import list_ready_products
+        found = research_products()
+        if found:
+            listed = await list_ready_products(limit=len(found))
+            if listed:
+                await send(app, f"🚀 Bot started — auto-listed *{len(listed)}* new products!")
+            else:
+                await send(app, f"🚀 Bot started — {len(found)} products queued\\. Run /list to publish.")
+        else:
+            await send(app, "🚀 Bot started\\. Run /research to find products\\.")
+    except Exception as e:
+        logger.error(f"[Startup] Error: {e}")
+
+
 async def main():
     check_config()
     app = create_app()
@@ -39,6 +59,7 @@ async def main():
         logger.info("✅ Dropship bot running. Open Telegram and send /start")
 
         await asyncio.gather(
+            startup_task(app),
             research_loop(app),
             order_loop(app),
             price_loop(app),
