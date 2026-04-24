@@ -1,7 +1,7 @@
 import logging
 import time
 from config import MIN_MARGIN_PERCENT, MARKUP_PERCENT, EBAY_FEE_PERCENT, MAX_LISTINGS
-from cj_client import search_products, get_shipping_cost
+from cj_client import search_products, get_shipping_cost, get_product_images
 from database import upsert_product, get_active_listings
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,10 @@ def research_products(keywords: list[str] = None, max_per_keyword: int = 3) -> l
             if margin < MIN_MARGIN_PERCENT:
                 continue
 
-            product_id = upsert_product(
+            extra_imgs = get_product_images(product["product_id"])
+            extra_images_str = ",".join(extra_imgs[1:])  # skip main (stored separately)
+
+            result = upsert_product(
                 walmart_url=product["url"],
                 walmart_item_id=product["variant_id"],
                 title=product["title"],
@@ -80,11 +83,15 @@ def research_products(keywords: list[str] = None, max_per_keyword: int = 3) -> l
                 ebay_price=ebay_price,
                 margin_percent=margin,
                 category=product.get("category", ""),
-                image_url=product.get("image_url", ""),
+                image_url=product.get("image_url", "") or (extra_imgs[0] if extra_imgs else ""),
+                extra_images=extra_images_str,
             )
 
+            if not result["ready"]:
+                continue  # already listed on eBay, don't inflate the count
+
             found.append({
-                "product_id": product_id,
+                "product_id": result["id"],
                 "title": product["title"],
                 "total_cost": total_cost,
                 "ebay_price": ebay_price,

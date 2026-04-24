@@ -87,6 +87,28 @@ def get_product(product_id: str) -> dict | None:
     return None
 
 
+def get_product_images(product_id: str) -> list[str]:
+    """Return up to 10 image URLs for a product (main + extras)."""
+    data = get_product(product_id)
+    if not data:
+        return []
+    images = []
+    main = data.get("productImage", "")
+    if main:
+        images.append(main)
+    image_set = data.get("productImageSet", "")
+    if isinstance(image_set, str):
+        for url in image_set.split(","):
+            url = url.strip()
+            if url and url not in images:
+                images.append(url)
+    elif isinstance(image_set, list):
+        for url in image_set:
+            if url and url not in images:
+                images.append(url)
+    return images[:10]
+
+
 def get_shipping_cost(product_id: str, country_code: str = "US") -> float:
     try:
         resp = requests.get(

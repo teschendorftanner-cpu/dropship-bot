@@ -1,8 +1,9 @@
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 
-DB_PATH = "dropship.db"
+DB_PATH = os.getenv("DB_PATH", "/data/dropship.db")
 
 
 @contextmanager
@@ -21,6 +22,7 @@ def get_db():
 
 
 def init_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     with get_db() as db:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS products (
@@ -33,6 +35,7 @@ def init_db():
                 margin_percent REAL NOT NULL,
                 category TEXT,
                 image_url TEXT,
+                extra_images TEXT DEFAULT '',
                 status TEXT DEFAULT 'pending',
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
@@ -87,31 +90,43 @@ def init_db():
                 value TEXT NOT NULL
             );
         """)
+        # Safe migration for existing databases
+        try:
+            db.execute("ALTER TABLE products ADD COLUMN extra_images TEXT DEFAULT ''")
+        except Exception:
+            pass
 
 
 # ── Products ──────────────────────────────────────────────────────────────────
 
 def upsert_product(walmart_url, walmart_item_id, title, walmart_price,
-                   ebay_price, margin_percent, category="", image_url="") -> int:
+                   ebay_price, margin_percent, category="", image_url="",
+                   extra_images="") -> dict:
+    """Returns {"id": int, "ready": bool} — ready=False means already listed on eBay."""
     with get_db() as db:
         existing = db.execute(
-            "SELECT id FROM products WHERE walmart_url = ?", (walmart_url,)
+            "SELECT id, status FROM products WHERE walmart_url = ?", (walmart_url,)
         ).fetchone()
         if existing:
+            already_listed = existing["status"] == "listed"
+            # Reset failed/stuck products back to ready; leave active listings alone
+            new_status = "listed" if already_listed else "ready"
             db.execute(
                 """UPDATE products SET walmart_price=?, ebay_price=?, margin_percent=?,
-                   updated_at=datetime('now') WHERE walmart_url=?""",
-                (walmart_price, ebay_price, margin_percent, walmart_url)
+                   image_url=?, extra_images=?, status=?, updated_at=datetime('now')
+                   WHERE walmart_url=?""",
+                (walmart_price, ebay_price, margin_percent, image_url, extra_images,
+                 new_status, walmart_url)
             )
-            return existing["id"]
+            return {"id": existing["id"], "ready": not already_listed}
         cur = db.execute(
             """INSERT INTO products (walmart_url, walmart_item_id, title, walmart_price,
-               ebay_price, margin_percent, category, image_url, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ready')""",
+               ebay_price, margin_percent, category, image_url, extra_images, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready')""",
             (walmart_url, walmart_item_id, title, walmart_price, ebay_price,
-             margin_percent, category, image_url)
+             margin_percent, category, image_url, extra_images)
         )
-        return cur.lastrowid
+        return {"id": cur.lastrowid, "ready": True}
 
 
 def get_ready_products(limit=10) -> list[dict]:

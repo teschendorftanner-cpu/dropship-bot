@@ -60,8 +60,9 @@ def _ack(root) -> bool:
 # ── Listings ──────────────────────────────────────────────────────────────────
 
 async def create_listing(title: str, description: str, price: float,
-                         image_url: str, category_id: str = "9355") -> str | None:
-    pic_xml = f"<PictureURL>{image_url}</PictureURL>" if image_url else ""
+                         image_urls: list = None, category_id: str = "9355") -> str | None:
+    pics = image_urls or []
+    pic_xml = "".join(f"<PictureURL>{u}</PictureURL>" for u in pics[:12] if u)
     body = f"""
   <Item>
     <Title>{title[:80]}</Title>
