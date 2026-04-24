@@ -38,6 +38,7 @@ async def startup_task(app):
         from database import sync_ebay_listing
         from research import research_products
         from lister import list_ready_products
+        from bot import remove_duplicate_listings
 
         # Step 1: sync active eBay listings back into DB so orders are fulfilled
         ebay_listings = get_active_ebay_listings()
@@ -48,6 +49,11 @@ async def startup_task(app):
         )
         if restored:
             logger.info(f"[Startup] Restored {restored} listing(s) from eBay")
+
+        # Step 2: remove any duplicates that built up
+        dedupe = await remove_duplicate_listings()
+        if dedupe["removed"]:
+            logger.info(f"[Startup] Removed {dedupe['removed']} duplicate listing(s)")
 
         # Step 2: research and list new products
         found = research_products()

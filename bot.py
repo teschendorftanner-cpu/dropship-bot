@@ -6,7 +6,8 @@ from config import (
     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
     RESEARCH_INTERVAL_HOURS, PRICE_SYNC_INTERVAL_HOURS, ORDER_POLL_MINUTES
 )
-from database import init_db, get_stats, get_active_listings, get_setting, set_setting
+from database import init_db, get_stats, get_active_listings, get_setting, set_setting, deactivate_listing
+from ebay_client import get_active_ebay_listings, end_listing
 from research import research_products
 from lister import list_ready_products
 from price_sync import sync_prices
@@ -40,6 +41,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "*/listings* — View all active eBay listings\n"
         "*/orders* — Check & fulfill pending orders\n"
         "*/syncprices* — Sync Walmart prices → eBay\n"
+        "*/dedupe* — Remove duplicate eBay listings\n"
         "*/pause* — Pause all automation\n"
         "*/resume* — Resume automation\n"
         "*/setmargin <pct>* — Change min margin (e.g. /setmargin 25)\n"
@@ -218,6 +220,45 @@ async def cmd_setmax(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Provide a number, e.g. /setmax 30")
 
 
+# ── Deduplication ────────────────────────────────────────────────────────────
+
+async def remove_duplicate_listings() -> dict:
+    """End all but the earliest listing for any duplicated eBay title."""
+    listings = get_active_ebay_listings()
+    by_title = {}
+    for l in listings:
+        key = l["title"].lower().strip()
+        by_title.setdefault(key, []).append(l)
+
+    ended = 0
+    for dupes in by_title.values():
+        if len(dupes) <= 1:
+            continue
+        dupes.sort(key=lambda x: x["ebay_item_id"])  # lowest ID = listed first
+        for dupe in dupes[1:]:
+            if await end_listing(dupe["ebay_item_id"]):
+                deactivate_listing(dupe["ebay_item_id"])
+                ended += 1
+                logger.info(f"Removed duplicate listing {dupe['ebay_item_id']}: {dupe['title'][:50]}")
+
+    return {"checked": len(listings), "removed": ended}
+
+
+async def cmd_dedupe(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not auth(update):
+        return
+    msg = await update.message.reply_text("🔍 Scanning for duplicate listings...")
+    result = await remove_duplicate_listings()
+    if result["removed"]:
+        await msg.edit_text(
+            f"✅ Dedupe complete — removed *{result['removed']}* duplicate(s) "
+            f"from {result['checked']} listings.",
+            parse_mode="Markdown"
+        )
+    else:
+        await msg.edit_text(f"✅ No duplicates found across {result['checked']} listings.")
+
+
 # ── Background loops ──────────────────────────────────────────────────────────
 
 async def research_loop(app: Application):
@@ -284,6 +325,7 @@ def create_app() -> Application:
     app.add_handler(CommandHandler("listings", cmd_listings))
     app.add_handler(CommandHandler("orders", cmd_orders))
     app.add_handler(CommandHandler("syncprices", cmd_syncprices))
+    app.add_handler(CommandHandler("dedupe", cmd_dedupe))
     app.add_handler(CommandHandler("pause", cmd_pause))
     app.add_handler(CommandHandler("resume", cmd_resume))
     app.add_handler(CommandHandler("setmargin", cmd_setmargin))
