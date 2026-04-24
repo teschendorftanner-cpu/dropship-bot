@@ -149,6 +149,7 @@ async def list_ready_products(limit: int = 10) -> list[dict]:
                 price=p["ebay_price"],
                 image_urls=image_urls,
                 category_id=category_id,
+                variant_id=p.get("walmart_item_id", ""),
             )
         except DuplicateListing:
             logger.info(f"  Already live on eBay, marking listed: {title[:50]}")

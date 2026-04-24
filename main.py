@@ -31,12 +31,25 @@ def check_config():
 
 
 async def startup_task(app):
-    """On every start, repopulate the DB so a fresh deploy never leaves the bot empty."""
+    """On every start, restore active eBay listings then repopulate research queue."""
     await asyncio.sleep(8)  # let Telegram polling settle first
-    logger.info("[Startup] Auto-research starting...")
     try:
+        from ebay_client import get_active_ebay_listings
+        from database import sync_ebay_listing
         from research import research_products
         from lister import list_ready_products
+
+        # Step 1: sync active eBay listings back into DB so orders are fulfilled
+        ebay_listings = get_active_ebay_listings()
+        restored = sum(
+            sync_ebay_listing(l["ebay_item_id"], l["title"],
+                              l["ebay_price"], l["sku"])
+            for l in ebay_listings
+        )
+        if restored:
+            logger.info(f"[Startup] Restored {restored} listing(s) from eBay")
+
+        # Step 2: research and list new products
         found = research_products()
         if found:
             listed = await list_ready_products(limit=len(found))

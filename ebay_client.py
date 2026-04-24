@@ -64,12 +64,15 @@ def _ack(root) -> bool:
 # ── Listings ──────────────────────────────────────────────────────────────────
 
 async def create_listing(title: str, description: str, price: float,
-                         image_urls: list = None, category_id: str = "9355") -> str | None:
+                         image_urls: list = None, category_id: str = "9355",
+                         variant_id: str = "") -> str | None:
     pics = image_urls or []
     pic_xml = "".join(f"<PictureURL>{u}</PictureURL>" for u in pics[:12] if u)
+    sku_xml = f"<SKU>{variant_id}</SKU>" if variant_id else ""
     body = f"""
   <Item>
     <Title>{title[:80]}</Title>
+    {sku_xml}
     <Description><![CDATA[{description}]]></Description>
     <PrimaryCategory><CategoryID>{category_id}</CategoryID></PrimaryCategory>
     <StartPrice>{price:.2f}</StartPrice>
@@ -159,6 +162,33 @@ async def end_listing(ebay_item_id: str) -> bool:
   <ItemID>{ebay_item_id}</ItemID>
   <EndingReason>NotAvailable</EndingReason>"""
     return _ack(_call("EndFixedPriceItem", body))
+
+
+# ── Active listing sync ───────────────────────────────────────────────────────
+
+def get_active_ebay_listings() -> list[dict]:
+    """Pull all currently active eBay listings so the DB can be restored after a reset."""
+    body = """
+  <ActiveList>
+    <Include>true</Include>
+    <Pagination><EntriesPerPage>200</EntriesPerPage></Pagination>
+  </ActiveList>"""
+    root = _call("GetMyeBaySelling", body)
+    if not _ack(root):
+        return []
+    items = []
+    for item in root.findall(f".//{_ns('Item')}"):
+        item_id = item.findtext(_ns("ItemID"))
+        if not item_id:
+            continue
+        price_el = item.find(f".//{_ns('CurrentPrice')}")
+        items.append({
+            "ebay_item_id": item_id,
+            "title": item.findtext(_ns("Title")) or "",
+            "sku": item.findtext(_ns("SKU")) or "",  # CJ variant ID
+            "ebay_price": float(price_el.text) if price_el is not None else 0.0,
+        })
+    return items
 
 
 # ── Orders ────────────────────────────────────────────────────────────────────

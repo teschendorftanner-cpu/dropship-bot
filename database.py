@@ -180,6 +180,35 @@ def update_listing_price(ebay_item_id, new_ebay_price, new_walmart_price):
         )
 
 
+def sync_ebay_listing(ebay_item_id: str, title: str, ebay_price: float,
+                      cj_variant_id: str = "") -> bool:
+    """Restore a listing to the DB after a reset. Returns True if newly added."""
+    with get_db() as db:
+        if db.execute("SELECT id FROM listings WHERE ebay_item_id=?",
+                      (ebay_item_id,)).fetchone():
+            return False
+        # Find existing product by title or create a placeholder
+        row = db.execute("SELECT id FROM products WHERE title=?", (title,)).fetchone()
+        if row:
+            product_id = row["id"]
+            db.execute("UPDATE products SET status='listed' WHERE id=?", (product_id,))
+        else:
+            cur = db.execute(
+                """INSERT INTO products (walmart_url, walmart_item_id, title,
+                   walmart_price, ebay_price, margin_percent, status)
+                   VALUES (?, ?, ?, 0, ?, 0, 'listed')""",
+                (f"ebay_sync:{ebay_item_id}", cj_variant_id, title, ebay_price)
+            )
+            product_id = cur.lastrowid
+        db.execute(
+            """INSERT OR IGNORE INTO listings
+               (product_id, ebay_item_id, ebay_price, walmart_price)
+               VALUES (?, ?, ?, 0)""",
+            (product_id, ebay_item_id, ebay_price)
+        )
+        return True
+
+
 def deactivate_listing(ebay_item_id):
     with get_db() as db:
         db.execute("UPDATE listings SET status='ended' WHERE ebay_item_id=?", (ebay_item_id,))
