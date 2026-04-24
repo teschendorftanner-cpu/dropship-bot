@@ -31,7 +31,7 @@ def _guess_category(title: str) -> str:
     return CATEGORY_MAP["default"]
 
 
-def _build_description(title: str, walmart_url: str) -> str:
+def _build_description(title: str) -> str:
     return f"""<div style="font-family:Arial,sans-serif;max-width:600px">
 <h2>{title}</h2>
 <p><strong>Brand new item.</strong> Fast shipping from US warehouse.</p>
@@ -44,17 +44,16 @@ def _build_description(title: str, walmart_url: str) -> str:
 </div>"""
 
 
-def list_ready_products(limit: int = 10) -> list[dict]:
-    """Pull ready products from DB and create eBay listings."""
+async def list_ready_products(limit: int = 10) -> list[dict]:
     products = get_ready_products(limit=limit)
     listed = []
 
     for p in products:
         logger.info(f"Listing: {p['title'][:60]}")
         category_id = _guess_category(p["title"])
-        description = _build_description(p["title"], p["walmart_url"])
+        description = _build_description(p["title"])
 
-        ebay_item_id = create_listing(
+        ebay_item_id = await create_listing(
             title=p["title"],
             description=description,
             price=p["ebay_price"],

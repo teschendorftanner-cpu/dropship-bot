@@ -91,7 +91,7 @@ async def cmd_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not auth(update):
         return
     msg = await update.message.reply_text("📝 Creating eBay listings...")
-    listed = list_ready_products(limit=10)
+    listed = await list_ready_products(limit=10)
     if not listed:
         await msg.edit_text("No ready products. Run /research first.")
         return
@@ -229,7 +229,7 @@ async def research_loop(app: Application):
         try:
             found = research_products()
             if found:
-                listed = list_ready_products(limit=len(found))
+                listed = await list_ready_products(limit=len(found))
                 if listed:
                     await send(app, f"🆕 Auto-listed *{len(listed)}* new products on eBay!")
         except Exception as e:
