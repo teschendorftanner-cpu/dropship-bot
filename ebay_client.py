@@ -44,9 +44,15 @@ def _ack(root) -> bool:
     if root is None:
         return False
     ack = root.findtext(_ns("Ack"))
+    for err in root.findall(f".//{_ns('Errors')}"):
+        severity = err.findtext(_ns("SeverityCode"), "")
+        msg = err.findtext(_ns("ShortMessage"), "")
+        if severity == "Warning":
+            logger.warning(f"eBay warning: {msg}")
+        elif msg:
+            logger.error(f"eBay error: {msg}")
     if ack not in ("Success", "Warning"):
-        for e in root.findall(f".//{_ns('ShortMessage')}"):
-            logger.error(f"eBay error: {e.text}")
+        logger.error(f"eBay Ack={ack!r}")
         return False
     return True
 

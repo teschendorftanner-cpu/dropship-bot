@@ -21,7 +21,6 @@ CATEGORY_MAP = {
     "kitchen": "20625",
     "home": "11700",
     "pet": "1281",
-    "car": "6030",
     "lamp": "112581",
     "light": "112581",
     "speaker": "14969",
