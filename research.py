@@ -9,68 +9,75 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_KEYWORDS = [
-    # Car accessories — high volume, strong margins
-    "car phone holder mount",
-    "car seat back organizer",
-    "car led interior lights",
-    "car air freshener vent",
-    "car trash can mini",
-    # Electronics & accessories
-    "wireless earbuds bluetooth",
-    "portable bluetooth speaker",
-    "power bank fast charge",
-    "usb c charging cable",
-    "led strip lights bedroom",
-    "ring light selfie phone",
-    "wireless charging pad",
-    # Phone accessories
-    "phone stand desk holder",
-    "phone lens camera kit",
-    "pop socket phone grip",
-    # Home & office
-    "cable management clips",
-    "desk organizer set",
-    "monitor stand riser",
-    "laptop stand adjustable",
-    "under desk storage",
-    "reusable water bottle",
-    # Health & wellness
-    "jade roller gua sha",
-    "face massager roller",
-    "posture corrector back",
-    "neck back massager",
-    "sleep eye mask",
-    "back stretcher posture",
-    # Fitness
-    "resistance band set",
-    "ab roller wheel",
-    "jump rope speed",
-    "foam roller massage",
-    "gym water bottle",
-    # Jewelry & accessories
-    "stainless steel necklace women",
-    "hoop earrings set",
-    "layered bracelet set",
-    "minimalist ring set",
-    "polarized sunglasses",
-    # Beauty
-    "makeup brush set professional",
-    "nail art kit",
-    "false eyelashes natural",
-    "hair scrunchie set",
-    "eyebrow stamp stencil",
-    # Kitchen
-    "silicone kitchen utensils",
-    "meal prep containers set",
-    "garlic press stainless",
-    "reusable silicone bags",
-    # Pets
-    "dog harness no pull",
-    "cat toy interactive",
-    "pet water bottle portable",
-    # Kids
-    "fidget toy sensory",
-    "kids art craft kit",
+    # ── Automotive (passionate buyers, fitment = less price competition) ──────
+    "LED interior car lights RGB",
+    "car phone mount magnetic dashboard",
+    "dash cam front rear 1080p",
+    "car seat cover waterproof universal",
+    "car blind spot mirror convex",
+    "LED license plate light truck",
+    "leather steering wheel cover grip",
+    "all weather car floor mat",
+    "wireless backup camera rear view",
+    "car seat back organizer pocket",
+    "truck bed LED light strip",
+    "car window sunshade foldable",
+    "car air freshener vent clip",
+    # ── Tools & hardware ──────────────────────────────────────────────────────
+    "magnetic wristband screw holder",
+    "LED rechargeable work light",
+    "self leveling laser level green",
+    "stud finder wall scanner digital",
+    "tool belt pouch organizer",
+    "cable management clips desk",
+    # ── Gaming & PC ───────────────────────────────────────────────────────────
+    "gaming headset RGB surround sound",
+    "extended gaming mouse pad XXL",
+    "controller charging station dock",
+    "gaming chair lumbar support cushion",
+    "monitor light bar screen lamp",
+    "PC cable management kit sleeve",
+    # ── Pet ───────────────────────────────────────────────────────────────────
+    "dog car seat cover waterproof",
+    "dog anxiety calming vest shirt",
+    "automatic pet feeder programmable",
+    "pet grooming deshedding glove",
+    "cat window perch hammock seat",
+    "retractable dog leash heavy duty",
+    "dog paw cleaner portable muddy",
+    # ── Home & office ─────────────────────────────────────────────────────────
+    "solar garden pathway lights outdoor",
+    "under cabinet LED light strip",
+    "high pressure handheld shower head",
+    "outlet wall shelf organizer",
+    "door draft stopper bottom seal",
+    "adjustable monitor riser desk stand",
+    "foldable laptop stand aluminum",
+    "bamboo desk organizer drawer set",
+    # ── Outdoor & survival ────────────────────────────────────────────────────
+    "rechargeable tactical flashlight 1000lm",
+    "pocket multi tool folding knife",
+    "solar rechargeable camping lantern",
+    "collapsible water bottle hiking",
+    # ── Health & wellness ─────────────────────────────────────────────────────
+    "posture corrector upper back brace",
+    "compression knee sleeve support brace",
+    "electric heating pad back lumbar",
+    "acupressure mat pillow set",
+    "3D contour sleep eye mask",
+    # ── Phone & electronics ───────────────────────────────────────────────────
+    "wireless earbuds active noise cancelling",
+    "20000mah portable power bank fast",
+    "USB C braided fast charging cable",
+    "ring light tripod stand selfie",
+    "15W wireless charging pad fast",
+    # ── Beauty ────────────────────────────────────────────────────────────────
+    "jade roller gua sha facial set",
+    "professional vegan makeup brush set",
+    "nail art stamping kit set",
+    # ── Kids ──────────────────────────────────────────────────────────────────
+    "LCD writing tablet kids drawing",
+    "sensory fidget toy pack set",
 ]
 
 
