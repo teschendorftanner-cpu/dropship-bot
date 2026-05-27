@@ -531,8 +531,12 @@ async def cmd_markshipped(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     tracking = ctx.args[1].strip() if len(ctx.args) > 1 else ""
     msg = await update.message.reply_text(f"🔄 Marking order `{ebay_order_id}` as shipped...", parse_mode="Markdown")
     from ebay_client import mark_order_shipped
+    from database import get_order_by_ebay_id, mark_order_fulfilled
     success = await mark_order_shipped(ebay_order_id, tracking_number=tracking)
     if success:
+        order = get_order_by_ebay_id(ebay_order_id)
+        if order:
+            mark_order_fulfilled(order["id"], cj_order_id=order.get("cj_order_id") or "", tracking=tracking)
         await msg.edit_text(f"✅ eBay order `{ebay_order_id}` marked as shipped.", parse_mode="Markdown")
     else:
         await msg.edit_text(f"❌ Failed — check Railway logs for details.")
