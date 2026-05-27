@@ -57,6 +57,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "*/list [n]* — List ready products on eBay\n"
         "*/listings* — View all active eBay listings\n"
         "*/addproduct <cj_url>* — Manually queue a specific CJ product\n"
+        "*/checklinks* — See which listings are missing a CJ variant ID\n"
         "*/addkeyword <keyword>* — Add a research keyword\n"
         "*/removekeyword <keyword>* — Remove a keyword\n"
         "*/keywords* — List all custom keywords\n\n"
@@ -435,6 +436,33 @@ async def cmd_keywords(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
+async def cmd_checklinks(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not auth(update):
+        return
+    listings = get_active_listings()
+    if not listings:
+        await update.message.reply_text("No active listings.")
+        return
+    missing = [l for l in listings if not l.get("cj_variant_id")]
+    linked = len(listings) - len(missing)
+    if not missing:
+        await update.message.reply_text(
+            f"✅ All {linked} listings have a CJ variant ID linked.",
+            parse_mode="Markdown"
+        )
+        return
+    lines = [
+        f"🔗 *{linked}/{len(listings)} listings linked to CJ*\n",
+        f"❌ *{len(missing)} missing a CJ variant ID:*\n"
+    ]
+    for l in missing[:20]:
+        lines.append(f"• `{l['ebay_item_id']}` — {_esc(l['title'][:50])}")
+    if len(missing) > 20:
+        lines.append(f"\n...and {len(missing) - 20} more")
+    lines.append("\nFix with: /addproduct <cj_url> or /fulfill <order_id> <cj_url>")
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
 async def cmd_addproduct(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not auth(update):
         return
@@ -755,5 +783,6 @@ def create_app() -> Application:
     app.add_handler(CommandHandler("removekeyword", cmd_removekeyword))
     app.add_handler(CommandHandler("keywords", cmd_keywords))
     app.add_handler(CommandHandler("addproduct", cmd_addproduct))
+    app.add_handler(CommandHandler("checklinks", cmd_checklinks))
 
     return app
