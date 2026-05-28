@@ -2,7 +2,8 @@ import asyncio
 import logging
 from database import (
     get_active_listings, save_order, get_pending_orders,
-    mark_order_fulfilled, mark_order_failed, log_profit, update_product_variant
+    mark_order_fulfilled, mark_order_failed, log_profit, update_product_variant,
+    get_order_by_ebay_id
 )
 from ebay_client import get_new_orders, mark_order_shipped
 from fulfillment import fulfill_order
@@ -46,7 +47,8 @@ def poll_new_orders(days_back: int = 3) -> list[dict]:
             sale_price=o["sale_price"],
             cj_price=listing["cj_price"],
         )
-        if order_db_id:
+        existing = get_order_by_ebay_id(o["order_id"])
+        if order_db_id and existing and existing["status"] != "fulfilled":
             new_orders.append({
                 "order_db_id": order_db_id,
                 "ebay_order_id": o["order_id"],
