@@ -758,6 +758,56 @@ async def price_loop(app: Application):
             logger.error(f"[Price loop] Error: {e}")
 
 
+async def cmd_trimlistings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not auth(update):
+        return
+    keep = 50
+    if ctx.args:
+        try:
+            keep = max(1, int(ctx.args[0]))
+        except ValueError:
+            pass
+    msg = await update.message.reply_text(f"🔄 Trimming to top {keep} listings by sales then margin...")
+
+    from database import get_db
+    with get_db() as db:
+        rows = db.execute(
+            """SELECT l.ebay_item_id, l.id,
+                      COUNT(o.id) as sales,
+                      p.margin_percent
+               FROM listings l
+               JOIN products p ON l.product_id = p.id
+               LEFT JOIN orders o ON o.listing_id = l.id AND o.status = 'fulfilled'
+               WHERE l.status = 'active'
+               GROUP BY l.id
+               ORDER BY sales DESC, p.margin_percent DESC"""
+        ).fetchall()
+
+    to_keep = {r["ebay_item_id"] for r in rows[:keep]}
+    to_end = [r["ebay_item_id"] for r in rows[keep:]]
+
+    if not to_end:
+        await msg.edit_text(f"Already at or under {keep} listings — nothing to end.")
+        return
+
+    ended = 0
+    failed = 0
+    for ebay_item_id in to_end:
+        try:
+            await end_listing(ebay_item_id)
+            deactivate_listing(ebay_item_id)
+            ended += 1
+        except Exception as e:
+            logger.error(f"[trimlistings] Failed to end {ebay_item_id}: {e}")
+            failed += 1
+        await asyncio.sleep(0.3)
+
+    text = f"✅ Done\\. Kept {len(to_keep)}, ended {ended}"
+    if failed:
+        text += f", failed {failed} \\(check logs\\)"
+    await msg.edit_text(text, parse_mode="MarkdownV2")
+
+
 def create_app() -> Application:
     init_db()
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
@@ -788,5 +838,6 @@ def create_app() -> Application:
     app.add_handler(CommandHandler("keywords", cmd_keywords))
     app.add_handler(CommandHandler("addproduct", cmd_addproduct))
     app.add_handler(CommandHandler("checklinks", cmd_checklinks))
+    app.add_handler(CommandHandler("trimlistings", cmd_trimlistings))
 
     return app
