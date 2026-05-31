@@ -96,7 +96,6 @@ async def main():
 
         await asyncio.gather(
             startup_task(app),
-            research_loop(app),
             order_loop(app),
             price_loop(app),
         )
