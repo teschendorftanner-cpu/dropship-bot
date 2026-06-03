@@ -27,7 +27,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # Profit settings
 MIN_MARGIN_PERCENT = float(os.getenv("MIN_MARGIN_PERCENT", "25"))
-MARKUP_PERCENT = float(os.getenv("MARKUP_PERCENT", "60"))
+MARKUP_PERCENT = float(os.getenv("MARKUP_PERCENT", "70"))
 EBAY_FEE_PERCENT = float(os.getenv("EBAY_FEE_PERCENT", "15.5"))
 MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "50"))  # stay under eBay's 250 free insertions/month
 RESEARCH_INTERVAL_HOURS = float(os.getenv("RESEARCH_INTERVAL_HOURS", "6"))

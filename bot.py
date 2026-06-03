@@ -783,6 +783,17 @@ async def cmd_diagnose(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ready = db.execute("SELECT COUNT(*) as c FROM products WHERE status='ready'").fetchone()["c"]
     lines.append(f"🗄 DB products — listed: {already_listed}, ready to list: {ready}")
 
+    # 3b. Margin math check
+    from config import MARKUP_PERCENT, EBAY_FEE_PERCENT
+    sample_cost = 20.0
+    sample_price = sample_cost * (1 + MARKUP_PERCENT / 100)
+    sample_margin = ((sample_price * (1 - EBAY_FEE_PERCENT / 100) - sample_cost) / sample_price) * 100
+    margin_ok = sample_margin >= MIN_MARGIN_PERCENT
+    lines.append(
+        f"{'✅' if margin_ok else '❌'} Margin math: {MARKUP_PERCENT:.0f}% markup → "
+        f"{sample_margin:.1f}% margin (need {MIN_MARGIN_PERCENT:.0f}%)"
+    )
+
     # 4. Test one keyword
     test_keyword = "LED interior car lights RGB"
     results = cj_search(test_keyword, page_size=10)
