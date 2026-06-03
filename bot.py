@@ -11,7 +11,7 @@ from database import (
     init_db, get_stats, get_active_listings, get_setting, set_setting,
     deactivate_listing, get_fulfilled_without_tracking, save_tracking,
     get_keywords, add_keyword, remove_keyword,
-    get_failed_orders, get_fulfilled_orders,
+    get_failed_orders, get_fulfilled_orders, reset_orphaned_products,
 )
 from ebay_client import get_active_ebay_listings, end_listing, get_suggested_category, revise_category
 from research import research_products
@@ -898,6 +898,7 @@ async def cmd_trimlistings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 def create_app() -> Application:
     init_db()
+    reset_orphaned_products()
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", cmd_start))

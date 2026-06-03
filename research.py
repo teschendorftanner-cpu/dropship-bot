@@ -109,6 +109,18 @@ def research_products(keywords: list[str] = None, max_per_keyword: int = 3) -> l
         if not cj_products:
             logger.info(f"  No CJ results for '{keyword}'")
             continue
+        # If all page-1 results are already in the DB, try page 2
+        from database import get_db as _get_db
+        with _get_db() as _db:
+            all_known = all(
+                _db.execute("SELECT 1 FROM products WHERE cj_url=?", (p["url"],)).fetchone()
+                for p in cj_products
+            )
+        if all_known:
+            logger.info(f"  All page-1 results already in DB — trying page 2")
+            page2 = search_products(keyword, page=2, page_size=15)
+            if page2:
+                cj_products = page2
 
         # Check eBay demand once per keyword — this sets our price ceiling
         # and confirms buyers are actually paying for this category

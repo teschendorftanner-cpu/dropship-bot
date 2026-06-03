@@ -250,6 +250,23 @@ def sync_ebay_listing(ebay_item_id: str, title: str, ebay_price: float,
 def deactivate_listing(ebay_item_id):
     with get_db() as db:
         db.execute("UPDATE listings SET status='ended' WHERE ebay_item_id=?", (ebay_item_id,))
+        db.execute(
+            """UPDATE products SET status='ready'
+               WHERE id = (SELECT product_id FROM listings WHERE ebay_item_id=?)""",
+            (ebay_item_id,)
+        )
+
+
+def reset_orphaned_products():
+    """Reset products whose listings are all ended back to ready so research can re-list them."""
+    with get_db() as db:
+        db.execute(
+            """UPDATE products SET status='ready'
+               WHERE status='listed'
+               AND id NOT IN (
+                   SELECT product_id FROM listings WHERE status='active'
+               )"""
+        )
 
 
 # ── Orders ────────────────────────────────────────────────────────────────────
