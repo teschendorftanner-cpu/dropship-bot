@@ -794,7 +794,9 @@ async def cmd_diagnose(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"{sample_margin:.1f}% margin (need {MIN_MARGIN_PERCENT:.0f}%)"
     )
 
-    # 4. Test one keyword
+    # 4. Test one keyword — trace full filter chain on first new product
+    from cj_client import get_shipping_cost as cj_shipping
+    from ebay_client import get_sold_median
     test_keyword = "LED interior car lights RGB"
     results = cj_search(test_keyword, page_size=10)
     lines.append(f"🔍 CJ search '{test_keyword}': {len(results)} raw results")
@@ -802,15 +804,29 @@ async def cmd_diagnose(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         price_ok = [r for r in results if 5 <= r["price"] <= 50]
         has_image = [r for r in price_ok if r.get("image_url")]
         lines.append(f"   • Price $5–$50: {len(price_ok)}, has image: {len(has_image)}")
-        already_in_db = 0
         with get_db() as db:
-            for r in has_image:
-                row = db.execute("SELECT status FROM products WHERE cj_url=?", (r["url"],)).fetchone()
-                if row:
-                    already_in_db += 1
-        lines.append(f"   • Already in DB: {already_in_db} / {len(has_image)}")
-        new_products = len(has_image) - already_in_db
-        lines.append(f"   • New to DB: {new_products}")
+            new_products = [r for r in has_image if not db.execute(
+                "SELECT 1 FROM products WHERE cj_url=?", (r["url"],)).fetchone()]
+        lines.append(f"   • New to DB: {len(new_products)}")
+
+        if new_products:
+            p = new_products[0]
+            shipping = cj_shipping(p["product_id"])
+            total_cost = round(p["price"] + shipping, 2)
+            ebay_price = round(total_cost * (1 + MARKUP_PERCENT / 100), 2)
+            try:
+                ebay_median = get_sold_median(test_keyword)
+            except Exception:
+                ebay_median = None
+            capped = False
+            if ebay_median and ebay_price > ebay_median * 0.92:
+                ebay_price = round(ebay_median * 0.92, 2)
+                capped = True
+            margin = ((ebay_price * (1 - EBAY_FEE_PERCENT / 100) - total_cost) / ebay_price) * 100
+            lines.append(f"\n📊 Sample product trace:")
+            lines.append(f"   CJ price: ${p['price']:.2f} + shipping ${shipping:.2f} = ${total_cost:.2f}")
+            lines.append(f"   eBay price: ${ebay_price:.2f}{' (capped by median $' + str(ebay_median) + ')' if capped else ''}")
+            lines.append(f"   {'✅' if margin >= MIN_MARGIN_PERCENT else '❌'} Margin: {margin:.1f}% (need {MIN_MARGIN_PERCENT:.0f}%)")
 
     await msg.edit_text("\n".join(lines))
 
