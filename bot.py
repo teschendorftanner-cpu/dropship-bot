@@ -101,7 +101,11 @@ async def cmd_research(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not auth(update):
         return
     msg = await update.message.reply_text("🔍 Researching profitable products...")
-    found = research_products()
+    try:
+        found = research_products()
+    except Exception as e:
+        await msg.edit_text(f"❌ Research error: {e}")
+        return
     if not found:
         await msg.edit_text("No new profitable products found right now. Try again later.")
         return
@@ -827,6 +831,17 @@ async def cmd_diagnose(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             lines.append(f"   CJ price: ${p['price']:.2f} + shipping ${shipping:.2f} = ${total_cost:.2f}")
             lines.append(f"   eBay price: ${ebay_price:.2f}{' (capped by median $' + str(ebay_median) + ')' if capped else ''}")
             lines.append(f"   {'✅' if margin >= MIN_MARGIN_PERCENT else '❌'} Margin: {margin:.1f}% (need {MIN_MARGIN_PERCENT:.0f}%)")
+
+            # Check if upsert_product would block it via variant_id
+            with get_db() as db:
+                by_vid = db.execute(
+                    "SELECT status FROM products WHERE cj_variant_id=? AND status='listed'",
+                    (p["variant_id"],)
+                ).fetchone()
+            if by_vid:
+                lines.append(f"   ❌ Blocked: variant_id already in DB as 'listed' — upsert returns ready=False")
+            else:
+                lines.append(f"   ✅ Variant ID not blocked")
 
     await msg.edit_text("\n".join(lines))
 
