@@ -758,6 +758,52 @@ async def price_loop(app: Application):
             logger.error(f"[Price loop] Error: {e}")
 
 
+async def cmd_diagnose(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not auth(update):
+        return
+    msg = await update.message.reply_text("🔬 Running research diagnostics...")
+
+    lines = []
+
+    # 1. CJ auth
+    from cj_client import _get_token, search_products as cj_search
+    token = _get_token()
+    lines.append(f"{'✅' if token else '❌'} CJ auth: {'OK' if token else 'FAILED — check CJ_API_KEY'}")
+
+    # 2. Slot count
+    from database import get_active_listings, get_db
+    active = get_active_listings()
+    from config import MAX_LISTINGS, MIN_MARGIN_PERCENT
+    slots = MAX_LISTINGS - len(active)
+    lines.append(f"📦 Active listings: {len(active)} / {MAX_LISTINGS} ({slots} slots open)")
+
+    # 3. Products already in DB as 'listed'
+    with get_db() as db:
+        already_listed = db.execute("SELECT COUNT(*) as c FROM products WHERE status='listed'").fetchone()["c"]
+        ready = db.execute("SELECT COUNT(*) as c FROM products WHERE status='ready'").fetchone()["c"]
+    lines.append(f"🗄 DB products — listed: {already_listed}, ready to list: {ready}")
+
+    # 4. Test one keyword
+    test_keyword = "LED interior car lights RGB"
+    results = cj_search(test_keyword, page_size=10)
+    lines.append(f"🔍 CJ search '{test_keyword}': {len(results)} raw results")
+    if results:
+        price_ok = [r for r in results if 5 <= r["price"] <= 50]
+        has_image = [r for r in price_ok if r.get("image_url")]
+        lines.append(f"   • Price $5–$50: {len(price_ok)}, has image: {len(has_image)}")
+        already_in_db = 0
+        with get_db() as db:
+            for r in has_image:
+                row = db.execute("SELECT status FROM products WHERE cj_url=?", (r["url"],)).fetchone()
+                if row:
+                    already_in_db += 1
+        lines.append(f"   • Already in DB: {already_in_db} / {len(has_image)}")
+        new_products = len(has_image) - already_in_db
+        lines.append(f"   • New to DB: {new_products}")
+
+    await msg.edit_text("\n".join(lines))
+
+
 async def cmd_trimlistings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not auth(update):
         return
@@ -839,5 +885,6 @@ def create_app() -> Application:
     app.add_handler(CommandHandler("addproduct", cmd_addproduct))
     app.add_handler(CommandHandler("checklinks", cmd_checklinks))
     app.add_handler(CommandHandler("trimlistings", cmd_trimlistings))
+    app.add_handler(CommandHandler("diagnose", cmd_diagnose))
 
     return app
