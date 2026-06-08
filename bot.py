@@ -132,9 +132,14 @@ async def cmd_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Usage: /list [number] — e.g. /list 5")
             return
     msg = await update.message.reply_text(f"📝 Creating up to {limit} eBay listings...")
+    from database import get_ready_products
+    ready_count = len(get_ready_products(limit=200))
     listed = await list_ready_products(limit=limit)
     if not listed:
-        await msg.edit_text("No ready products. Run /research first.")
+        if ready_count == 0:
+            await msg.edit_text("No ready products. Run /research first.")
+        else:
+            await msg.edit_text(f"❌ Found {ready_count} ready product(s) but all eBay listing attempts failed — check Railway logs.")
         return
     lines = [f"✅ *{len(listed)} listings created on eBay!*\n"]
     for l in listed:

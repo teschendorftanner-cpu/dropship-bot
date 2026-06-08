@@ -400,12 +400,19 @@ async def list_ready_products(limit: int = 10) -> list[dict]:
         logger.info(f"Listing: {title[:60]}")
         category_id = get_suggested_category(title)
 
-        # Build image list: main image + any extras stored during research
+        # Build image list: fetch extra images now at listing time
+        from cj_client import get_product_images
+        from urllib.parse import urlparse
+        pid_match = re.search(r'-p-([A-Za-z0-9]+)\.html', p.get("cj_url", ""))
+        extra_imgs = get_product_images(pid_match.group(1)) if pid_match else []
         image_urls = []
         if p.get("image_url"):
             image_urls.append(p["image_url"])
+        for u in extra_imgs:
+            if u not in image_urls:
+                image_urls.append(u)
         if p.get("extra_images"):
-            image_urls += [u.strip() for u in p["extra_images"].split(",") if u.strip()]
+            image_urls += [u.strip() for u in p["extra_images"].split(",") if u.strip() and u.strip() not in image_urls]
         image_urls = image_urls[:12]  # eBay max
 
         description = _build_description(title, image_urls)

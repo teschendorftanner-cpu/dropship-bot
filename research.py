@@ -164,9 +164,6 @@ def research_products(keywords: list[str] = None, max_per_keyword: int = 3) -> l
             if margin < MIN_MARGIN_PERCENT:
                 continue
 
-            extra_imgs = get_product_images(product["product_id"])
-            extra_images_str = ",".join(extra_imgs[1:])
-
             result = upsert_product(
                 cj_url=product["url"],
                 cj_variant_id=product["variant_id"],
@@ -175,8 +172,8 @@ def research_products(keywords: list[str] = None, max_per_keyword: int = 3) -> l
                 ebay_price=ebay_price,
                 margin_percent=margin,
                 category=product.get("category", ""),
-                image_url=product.get("image_url", "") or (extra_imgs[0] if extra_imgs else ""),
-                extra_images=extra_images_str,
+                image_url=product.get("image_url", ""),
+                extra_images="",
             )
 
             if not result["ready"]:
