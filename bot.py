@@ -901,6 +901,46 @@ async def cmd_trimlistings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text(text, parse_mode="MarkdownV2")
 
 
+async def cmd_findandlist(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not auth(update):
+        return
+    limit = 10
+    if ctx.args:
+        try:
+            limit = max(1, min(int(ctx.args[0]), 50))
+        except ValueError:
+            await update.message.reply_text("Usage: /findandlist [number] — e.g. /findandlist 5")
+            return
+
+    msg = await update.message.reply_text(f"🔍 Researching products...")
+    try:
+        found = research_products()
+    except Exception as e:
+        await msg.edit_text(f"❌ Research error: {e}")
+        return
+
+    if not found:
+        await msg.edit_text("No new profitable products found. Try again later.")
+        return
+
+    await msg.edit_text(f"🔍 Found {len(found)} product(s) — listing up to {limit} on eBay...")
+
+    listed = await list_ready_products(limit=limit)
+    if not listed:
+        await msg.edit_text(f"❌ Found {len(found)} product(s) but all eBay listing attempts failed — check Railway logs.")
+        return
+
+    lines = [f"✅ *{len(listed)} listing(s) created!*\n"]
+    for l in listed:
+        lines.append(
+            f"• {_esc(l['title'][:50])}\n"
+            f"  Item ID: `{l['ebay_item_id']}` @ ${l['ebay_price']:.2f}"
+        )
+    if len(found) > len(listed):
+        lines.append(f"\n_{len(found) - len(listed)} more ready — run /list to publish them\\._")
+    await msg.edit_text("\n".join(lines), parse_mode="Markdown")
+
+
 def create_app() -> Application:
     init_db()
     reset_orphaned_products()
@@ -934,5 +974,6 @@ def create_app() -> Application:
     app.add_handler(CommandHandler("checklinks", cmd_checklinks))
     app.add_handler(CommandHandler("trimlistings", cmd_trimlistings))
     app.add_handler(CommandHandler("diagnose", cmd_diagnose))
+    app.add_handler(CommandHandler("findandlist", cmd_findandlist))
 
     return app
