@@ -205,8 +205,12 @@ async def create_listing(title: str, description: str, price: float,
                          image_urls: list = None, category_id: str = "9355",
                          variant_id: str = "",
                          item_specifics: list = None) -> str | None:
-    pics = image_urls or []
-    pic_xml = "".join(f"<PictureURL>{u}</PictureURL>" for u in pics[:12] if u)
+    def _valid_pic(url: str) -> bool:
+        u = (url or "").strip()
+        return bool(u) and u.startswith("https://") and " " not in u and len(u) < 2000
+
+    pics = [u.strip() for u in (image_urls or []) if _valid_pic(u)]
+    pic_xml = "".join(f"<PictureURL>{u}</PictureURL>" for u in pics[:12])
     sku_xml = f"<SKU>{variant_id}</SKU>" if variant_id else ""
 
     specs = item_specifics or [
