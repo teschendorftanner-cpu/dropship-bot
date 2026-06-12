@@ -267,8 +267,16 @@ async def create_listing(title: str, description: str, price: float,
                 raise DuplicateListing()
             if "category" in msg.lower():
                 raise InvalidCategory(msg)
-        first_error = errors[0].findtext(_ns("ShortMessage")) if errors else ("No response from eBay — check token/credentials")
-        raise EbayListingError(first_error)
+        if errors:
+            short = errors[0].findtext(_ns("ShortMessage")) or ""
+            long_ = errors[0].findtext(_ns("LongMessage")) or ""
+            code  = errors[0].findtext(_ns("ErrorCode")) or ""
+            detail = f"[{code}] {short} — {long_}" if long_ else f"[{code}] {short}"
+        elif root is None:
+            detail = "No response from eBay — check token/credentials"
+        else:
+            detail = "Unknown eBay error (no error elements in response)"
+        raise EbayListingError(detail)
     item_id = root.findtext(_ns("ItemID"))
     item_id = root.findtext(_ns("ItemID"))
     if item_id:
