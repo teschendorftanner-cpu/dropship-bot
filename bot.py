@@ -134,12 +134,12 @@ async def cmd_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text(f"📝 Creating up to {limit} eBay listings...")
     from database import get_ready_products
     ready_count = len(get_ready_products(limit=200))
-    listed = await list_ready_products(limit=limit)
+    listed, first_error = await list_ready_products(limit=limit)
     if not listed:
         if ready_count == 0:
             await msg.edit_text("No ready products. Run /research first.")
         else:
-            await msg.edit_text(f"❌ Found {ready_count} ready product(s) but all eBay listing attempts failed — check Railway logs.")
+            await msg.edit_text(f"❌ Found {ready_count} ready product(s) but eBay rejected them.\nError: {first_error}")
         return
     lines = [f"✅ *{len(listed)} listings created on eBay!*\n"]
     for l in listed:
@@ -925,9 +925,9 @@ async def cmd_findandlist(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await msg.edit_text(f"🔍 Found {len(found)} product(s) — listing up to {limit} on eBay...")
 
-    listed = await list_ready_products(limit=limit)
+    listed, first_error = await list_ready_products(limit=limit)
     if not listed:
-        await msg.edit_text(f"❌ Found {len(found)} product(s) but all eBay listing attempts failed — check Railway logs.")
+        await msg.edit_text(f"❌ Found {len(found)} product(s) but eBay rejected them.\nError: {first_error}")
         return
 
     lines = [f"✅ *{len(listed)} listing(s) created!*\n"]

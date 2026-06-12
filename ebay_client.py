@@ -25,6 +25,10 @@ class InvalidCategory(Exception):
     pass
 
 
+class EbayListingError(Exception):
+    pass
+
+
 # ── OAuth 2.0 auto-refresh ────────────────────────────────────────────────────
 
 def _get_access_token() -> str:
@@ -256,13 +260,16 @@ async def create_listing(title: str, description: str, price: float,
 
     root = _call("AddFixedPriceItem", body)
     if not _ack(root):
-        for err in (root.findall(f".//{_ns('Errors')}") if root is not None else []):
+        errors = root.findall(f".//{_ns('Errors')}") if root is not None else []
+        for err in errors:
             msg = err.findtext(_ns("ShortMessage")) or ""
             if "Duplicate" in msg:
                 raise DuplicateListing()
             if "category" in msg.lower():
                 raise InvalidCategory(msg)
-        return None
+        first_error = errors[0].findtext(_ns("ShortMessage")) if errors else ("No response from eBay — check token/credentials")
+        raise EbayListingError(first_error)
+    item_id = root.findtext(_ns("ItemID"))
     item_id = root.findtext(_ns("ItemID"))
     if item_id:
         logger.info(f"Created eBay listing {item_id}")
