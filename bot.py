@@ -851,6 +851,43 @@ async def cmd_diagnose(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text("\n".join(lines))
 
 
+async def cmd_endall(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not auth(update):
+        return
+    if not ctx.args or ctx.args[0] != "CONFIRM":
+        await update.message.reply_text(
+            "⚠️ This ends ALL active eBay listings permanently.\n"
+            "Send `/endall CONFIRM` to proceed.",
+            parse_mode="Markdown"
+        )
+        return
+
+    msg = await update.message.reply_text("🔄 Ending all active listings...")
+    listings = get_active_listings()
+    if not listings:
+        await msg.edit_text("No active listings to end.")
+        return
+
+    ended = 0
+    failed = 0
+    for l in listings:
+        try:
+            await end_listing(l["ebay_item_id"])
+            deactivate_listing(l["ebay_item_id"])
+            ended += 1
+        except Exception as e:
+            logger.error(f"[endall] Failed to end {l['ebay_item_id']}: {e}")
+            failed += 1
+        await asyncio.sleep(0.3)
+
+    set_setting("paused", "true")
+    text = f"✅ Ended {ended} listing(s)"
+    if failed:
+        text += f", {failed} failed (check Railway logs)"
+    text += ". Bot paused — no new research/listing/order activity will run."
+    await msg.edit_text(text)
+
+
 async def cmd_trimlistings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not auth(update):
         return
@@ -975,5 +1012,6 @@ def create_app() -> Application:
     app.add_handler(CommandHandler("trimlistings", cmd_trimlistings))
     app.add_handler(CommandHandler("diagnose", cmd_diagnose))
     app.add_handler(CommandHandler("findandlist", cmd_findandlist))
+    app.add_handler(CommandHandler("endall", cmd_endall))
 
     return app
