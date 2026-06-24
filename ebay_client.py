@@ -203,7 +203,7 @@ def get_suggested_category(title: str) -> str:
 
 async def create_listing(title: str, description: str, price: float,
                          image_urls: list = None, category_id: str = "9355",
-                         variant_id: str = "",
+                         variant_id: str = "", quantity: int = 1,
                          item_specifics: list = None) -> str | None:
     def _valid_pic(url: str) -> bool:
         u = (url or "").strip()
@@ -240,7 +240,7 @@ async def create_listing(title: str, description: str, price: float,
     <PictureDetails>{pic_xml}</PictureDetails>
     <PostalCode>10001</PostalCode>
     <Location>United States</Location>
-    <Quantity>10</Quantity>
+    <Quantity>{max(1, quantity)}</Quantity>
     <ItemSpecifics>{specs_xml}</ItemSpecifics>
     <ReturnPolicy>
       <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>

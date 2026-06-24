@@ -1,7 +1,7 @@
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
-from datetime import datetime
 from config import EBAY_FEE_PERCENT
 
 DB_PATH = os.getenv("DB_PATH", "dropship.db")
@@ -27,12 +27,13 @@ def init_db():
         db.executescript("""
             CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cj_url TEXT UNIQUE NOT NULL,
-                cj_variant_id TEXT,
+                source_ref TEXT UNIQUE NOT NULL,
+                sku TEXT,
                 title TEXT NOT NULL,
-                cj_price REAL NOT NULL,
+                cost_price REAL NOT NULL,
                 ebay_price REAL NOT NULL,
                 margin_percent REAL NOT NULL,
+                qty_on_hand INTEGER DEFAULT 1,
                 category TEXT,
                 image_url TEXT,
                 extra_images TEXT DEFAULT '',
@@ -46,7 +47,7 @@ def init_db():
                 product_id INTEGER NOT NULL,
                 ebay_item_id TEXT UNIQUE NOT NULL,
                 ebay_price REAL NOT NULL,
-                cj_price REAL NOT NULL,
+                cost_price REAL NOT NULL,
                 status TEXT DEFAULT 'active',
                 views INTEGER DEFAULT 0,
                 listed_at TEXT DEFAULT (datetime('now')),
@@ -64,10 +65,9 @@ def init_db():
                 buyer_zip TEXT,
                 buyer_country TEXT DEFAULT 'US',
                 sale_price REAL,
-                cj_price REAL,
+                cost_price REAL,
                 profit REAL,
                 status TEXT DEFAULT 'pending',
-                cj_order_id TEXT,
                 tracking_number TEXT,
                 created_at TEXT DEFAULT (datetime('now')),
                 fulfilled_at TEXT,
@@ -89,13 +89,6 @@ def init_db():
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
-
-            CREATE TABLE IF NOT EXISTS keywords (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                keyword TEXT UNIQUE NOT NULL,
-                active INTEGER DEFAULT 1,
-                added_at TEXT DEFAULT (datetime('now'))
-            );
         """)
         db.executescript("""
             CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
@@ -105,7 +98,7 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
         """)
 
-        # Safe migrations for existing databases
+        # Safe migrations for existing databases coming from the dropship-bot schema
         for migration in [
             "ALTER TABLE products ADD COLUMN extra_images TEXT DEFAULT ''",
             "ALTER TABLE products RENAME COLUMN walmart_url TO cj_url",
@@ -115,6 +108,12 @@ def init_db():
             "ALTER TABLE orders RENAME COLUMN walmart_price TO cj_price",
             "ALTER TABLE orders RENAME COLUMN walmart_order_id TO cj_order_id",
             "ALTER TABLE orders ADD COLUMN failure_reason TEXT DEFAULT ''",
+            "ALTER TABLE products RENAME COLUMN cj_url TO source_ref",
+            "ALTER TABLE products RENAME COLUMN cj_variant_id TO sku",
+            "ALTER TABLE products RENAME COLUMN cj_price TO cost_price",
+            "ALTER TABLE products ADD COLUMN qty_on_hand INTEGER DEFAULT 1",
+            "ALTER TABLE listings RENAME COLUMN cj_price TO cost_price",
+            "ALTER TABLE orders RENAME COLUMN cj_price TO cost_price",
         ]:
             try:
                 db.execute(migration)
@@ -122,49 +121,19 @@ def init_db():
                 pass
 
 
-# ── Products ──────────────────────────────────────────────────────────────────
+# ── Inventory (products table) ───────────────────────────────────────────────
 
-def upsert_product(cj_url, cj_variant_id, title, cj_price,
-                   ebay_price, margin_percent, category="", image_url="",
-                   extra_images="") -> dict:
-    """Returns {"id": int, "ready": bool} — ready=False means already listed on eBay."""
+def add_inventory_item(title, cost_price, ebay_price, margin_percent, qty=1,
+                        image_url="", extra_images="", category="") -> int:
     with get_db() as db:
-        existing = db.execute(
-            "SELECT id, status FROM products WHERE cj_url = ?", (cj_url,)
-        ).fetchone()
-        # Also catch post-reset synced placeholders matched by CJ variant ID
-        if not existing and cj_variant_id:
-            existing = db.execute(
-                "SELECT id, status FROM products WHERE cj_variant_id = ? AND status = 'listed'",
-                (cj_variant_id,)
-            ).fetchone()
-        if existing:
-            already_listed = existing["status"] == "listed"
-            new_status = "listed" if already_listed else "ready"
-            db.execute(
-                """UPDATE products SET cj_price=?, ebay_price=?, margin_percent=?,
-                   image_url=?, extra_images=?, status=?, updated_at=datetime('now')
-                   WHERE cj_url=?""",
-                (cj_price, ebay_price, margin_percent, image_url, extra_images,
-                 new_status, cj_url)
-            )
-            return {"id": existing["id"], "ready": not already_listed}
         cur = db.execute(
-            """INSERT INTO products (cj_url, cj_variant_id, title, cj_price,
-               ebay_price, margin_percent, category, image_url, extra_images, status)
+            """INSERT INTO products (source_ref, title, cost_price, ebay_price,
+               margin_percent, qty_on_hand, category, image_url, extra_images, status)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready')""",
-            (cj_url, cj_variant_id, title, cj_price, ebay_price,
-             margin_percent, category, image_url, extra_images)
+            (f"manual:{int(time.time() * 1000)}", title, cost_price, ebay_price,
+             margin_percent, qty, category, image_url, extra_images)
         )
-        return {"id": cur.lastrowid, "ready": True}
-
-
-def update_product_variant(product_id: int, cj_variant_id: str):
-    with get_db() as db:
-        db.execute(
-            "UPDATE products SET cj_variant_id=? WHERE id=?",
-            (cj_variant_id, product_id)
-        )
+        return cur.lastrowid
 
 
 def get_ready_products(limit=10) -> list[dict]:
@@ -190,37 +159,45 @@ def get_all_products(status=None) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-# ── Listings ──────────────────────────────────────────────────────────────────
-
-def save_listing(product_id, ebay_item_id, ebay_price, cj_price):
+def decrement_inventory(product_id: int, qty: int = 1):
     with get_db() as db:
         db.execute(
-            """INSERT OR REPLACE INTO listings (product_id, ebay_item_id, ebay_price, cj_price)
+            "UPDATE products SET qty_on_hand = MAX(qty_on_hand - ?, 0) WHERE id=?",
+            (qty, product_id)
+        )
+
+
+# ── Listings ──────────────────────────────────────────────────────────────────
+
+def save_listing(product_id, ebay_item_id, ebay_price, cost_price):
+    with get_db() as db:
+        db.execute(
+            """INSERT OR REPLACE INTO listings (product_id, ebay_item_id, ebay_price, cost_price)
                VALUES (?, ?, ?, ?)""",
-            (product_id, ebay_item_id, ebay_price, cj_price)
+            (product_id, ebay_item_id, ebay_price, cost_price)
         )
 
 
 def get_active_listings() -> list[dict]:
     with get_db() as db:
         rows = db.execute(
-            """SELECT l.*, p.title, p.cj_url, p.cj_variant_id
+            """SELECT l.*, p.title, p.sku, p.qty_on_hand
                FROM listings l JOIN products p ON l.product_id = p.id
                WHERE l.status='active'"""
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def update_listing_price(ebay_item_id, new_ebay_price, new_cj_price):
+def update_listing_price(ebay_item_id, new_ebay_price, new_cost_price):
     with get_db() as db:
         db.execute(
-            "UPDATE listings SET ebay_price=?, cj_price=? WHERE ebay_item_id=?",
-            (new_ebay_price, new_cj_price, ebay_item_id)
+            "UPDATE listings SET ebay_price=?, cost_price=? WHERE ebay_item_id=?",
+            (new_ebay_price, new_cost_price, ebay_item_id)
         )
 
 
 def sync_ebay_listing(ebay_item_id: str, title: str, ebay_price: float,
-                      cj_variant_id: str = "") -> bool:
+                      sku: str = "") -> bool:
     """Restore a listing to the DB after a reset. Returns True if newly added."""
     with get_db() as db:
         if db.execute("SELECT id FROM listings WHERE ebay_item_id=?",
@@ -232,15 +209,15 @@ def sync_ebay_listing(ebay_item_id: str, title: str, ebay_price: float,
             db.execute("UPDATE products SET status='listed' WHERE id=?", (product_id,))
         else:
             cur = db.execute(
-                """INSERT INTO products (cj_url, cj_variant_id, title,
-                   cj_price, ebay_price, margin_percent, status)
+                """INSERT INTO products (source_ref, sku, title,
+                   cost_price, ebay_price, margin_percent, status)
                    VALUES (?, ?, ?, 0, ?, 0, 'listed')""",
-                (f"ebay_sync:{ebay_item_id}", cj_variant_id, title, ebay_price)
+                (f"ebay_sync:{ebay_item_id}", sku, title, ebay_price)
             )
             product_id = cur.lastrowid
         db.execute(
             """INSERT OR IGNORE INTO listings
-               (product_id, ebay_item_id, ebay_price, cj_price)
+               (product_id, ebay_item_id, ebay_price, cost_price)
                VALUES (?, ?, ?, 0)""",
             (product_id, ebay_item_id, ebay_price)
         )
@@ -258,7 +235,7 @@ def deactivate_listing(ebay_item_id):
 
 
 def reset_orphaned_products():
-    """Reset products whose listings are all ended back to ready so research can re-list them."""
+    """Reset products whose listings are all ended back to ready so they can be relisted."""
     with get_db() as db:
         db.execute(
             """UPDATE products SET status='ready'
@@ -272,8 +249,8 @@ def reset_orphaned_products():
 # ── Orders ────────────────────────────────────────────────────────────────────
 
 def save_order(ebay_order_id, listing_id, buyer_name, address, city, state,
-               zip_code, country, sale_price, cj_price) -> int:
-    profit = sale_price * (1 - EBAY_FEE_PERCENT / 100) - cj_price
+               zip_code, country, sale_price, cost_price) -> int:
+    profit = sale_price * (1 - EBAY_FEE_PERCENT / 100) - cost_price
     with get_db() as db:
         existing = db.execute(
             "SELECT id, status FROM orders WHERE ebay_order_id=?", (ebay_order_id,)
@@ -285,10 +262,10 @@ def save_order(ebay_order_id, listing_id, buyer_name, address, city, state,
         cur = db.execute(
             """INSERT INTO orders (ebay_order_id, listing_id, buyer_name, buyer_address,
                buyer_city, buyer_state, buyer_zip, buyer_country, sale_price,
-               cj_price, profit, status)
+               cost_price, profit, status)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
             (ebay_order_id, listing_id, buyer_name, address, city, state,
-             zip_code, country, sale_price, cj_price, profit)
+             zip_code, country, sale_price, cost_price, profit)
         )
         return cur.lastrowid
 
@@ -301,26 +278,6 @@ def get_pending_orders() -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def get_fulfilled_without_tracking() -> list[dict]:
-    """Returns fulfilled orders that have a CJ order ID but no tracking number yet."""
-    with get_db() as db:
-        rows = db.execute(
-            """SELECT * FROM orders
-               WHERE status='fulfilled' AND cj_order_id != '' AND cj_order_id IS NOT NULL
-               AND (tracking_number IS NULL OR tracking_number = '')
-               ORDER BY fulfilled_at ASC"""
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-
-def save_tracking(order_id: int, tracking_number: str):
-    with get_db() as db:
-        db.execute(
-            "UPDATE orders SET tracking_number=? WHERE id=?",
-            (tracking_number, order_id)
-        )
-
-
 def get_order_by_ebay_id(ebay_order_id: str) -> dict | None:
     with get_db() as db:
         row = db.execute(
@@ -329,27 +286,19 @@ def get_order_by_ebay_id(ebay_order_id: str) -> dict | None:
         return dict(row) if row else None
 
 
-def mark_order_fulfilled(order_id, cj_order_id, tracking=""):
+def mark_order_fulfilled(order_id, tracking=""):
     with get_db() as db:
         db.execute(
-            """UPDATE orders SET status='fulfilled', cj_order_id=?,
+            """UPDATE orders SET status='fulfilled',
                tracking_number=?, fulfilled_at=datetime('now') WHERE id=?""",
-            (cj_order_id, tracking, order_id)
-        )
-
-
-def mark_order_failed(order_id, reason=""):
-    with get_db() as db:
-        db.execute(
-            "UPDATE orders SET status='failed', failure_reason=? WHERE id=?",
-            (reason, order_id)
+            (tracking, order_id)
         )
 
 
 def log_profit(order_id, sale_price, cost, ebay_fee, net_profit):
     with get_db() as db:
         db.execute(
-            """INSERT OR IGNORE INTO profit_log (order_id, sale_price, cost, ebay_fee, net_profit)
+            """INSERT INTO profit_log (order_id, sale_price, cost, ebay_fee, net_profit)
                VALUES (?, ?, ?, ?, ?)""",
             (order_id, sale_price, cost, ebay_fee, net_profit)
         )
@@ -376,9 +325,11 @@ def get_stats() -> dict:
         ).fetchone()["avg"]
         total_orders = db.execute("SELECT COUNT(*) as c FROM orders").fetchone()["c"]
         fulfilled = db.execute("SELECT COUNT(*) as c FROM orders WHERE status='fulfilled'").fetchone()["c"]
-        failed = db.execute("SELECT COUNT(*) as c FROM orders WHERE status='failed'").fetchone()["c"]
-        active_listings = db.execute("SELECT COUNT(*) as c FROM listings WHERE status='active'").fetchone()["c"]
         pending_orders = db.execute("SELECT COUNT(*) as c FROM orders WHERE status='pending'").fetchone()["c"]
+        active_listings = db.execute("SELECT COUNT(*) as c FROM listings WHERE status='active'").fetchone()["c"]
+        inventory_units = db.execute(
+            "SELECT COALESCE(SUM(qty_on_hand), 0) as c FROM products WHERE status IN ('ready','listed')"
+        ).fetchone()["c"]
         return {
             "total_profit": round(total_profit, 2),
             "today_profit": round(today_profit, 2),
@@ -387,9 +338,9 @@ def get_stats() -> dict:
             "avg_profit": round(avg_profit, 2),
             "total_orders": total_orders,
             "fulfilled_orders": fulfilled,
-            "failed_orders": failed,
             "active_listings": active_listings,
             "pending_orders": pending_orders,
+            "inventory_units": inventory_units,
         }
 
 
@@ -406,49 +357,7 @@ def set_setting(key, value):
         db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
 
 
-# ── Keywords ──────────────────────────────────────────────────────────────────
-
-def get_keywords() -> list[str]:
-    with get_db() as db:
-        rows = db.execute(
-            "SELECT keyword FROM keywords WHERE active=1 ORDER BY added_at ASC"
-        ).fetchall()
-        return [r["keyword"] for r in rows]
-
-
-def add_keyword(keyword: str) -> bool:
-    """Returns True if newly added, False if already exists."""
-    kw = keyword.lower().strip()
-    with get_db() as db:
-        existing = db.execute("SELECT id, active FROM keywords WHERE keyword=?", (kw,)).fetchone()
-        if existing:
-            if not existing["active"]:
-                db.execute("UPDATE keywords SET active=1 WHERE keyword=?", (kw,))
-            return False
-        db.execute("INSERT INTO keywords (keyword) VALUES (?)", (kw,))
-        return True
-
-
-def remove_keyword(keyword: str) -> bool:
-    """Returns True if found and removed."""
-    with get_db() as db:
-        result = db.execute("DELETE FROM keywords WHERE keyword=?", (keyword.lower().strip(),))
-        return result.rowcount > 0
-
-
 # ── Order history ─────────────────────────────────────────────────────────────
-
-def get_failed_orders() -> list[dict]:
-    with get_db() as db:
-        rows = db.execute(
-            """SELECT o.*, p.title FROM orders o
-               LEFT JOIN listings l ON o.listing_id = l.id
-               LEFT JOIN products p ON l.product_id = p.id
-               WHERE o.status='failed'
-               ORDER BY o.created_at DESC LIMIT 20"""
-        ).fetchall()
-        return [dict(r) for r in rows]
-
 
 def get_fulfilled_orders(limit: int = 10) -> list[dict]:
     with get_db() as db:

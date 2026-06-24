@@ -3,7 +3,7 @@ import logging
 import sys
 import telegram.error
 from config import TELEGRAM_BOT_TOKEN
-from bot import create_app, research_loop, order_loop, price_loop, send
+from bot import create_app, order_loop, send, _esc
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def check_config():
-    from config import EBAY_APP_ID, EBAY_CERT_ID, EBAY_REFRESH_TOKEN, CJ_API_KEY
+    from config import EBAY_APP_ID, EBAY_CERT_ID, EBAY_REFRESH_TOKEN
     missing = []
     if not TELEGRAM_BOT_TOKEN:
         missing.append("TELEGRAM_BOT_TOKEN")
@@ -27,8 +27,6 @@ def check_config():
         missing.append("EBAY_CERT_ID")
     if not EBAY_REFRESH_TOKEN:
         missing.append("EBAY_REFRESH_TOKEN")
-    if not CJ_API_KEY:
-        missing.append("CJ_API_KEY")
     if missing:
         logger.error(f"Missing required config: {', '.join(missing)}")
         logger.error("Set these in your .env file (see .env.example).")
@@ -43,7 +41,7 @@ async def startup_task(app):
         from database import sync_ebay_listing
         from bot import remove_duplicate_listings
 
-        # Step 1: sync active eBay listings back into DB so orders can be fulfilled
+        # Step 1: sync active eBay listings back into DB so orders can be matched
         ebay_listings = get_active_ebay_listings()
         restored = sum(
             sync_ebay_listing(l["ebay_item_id"], l["title"],
@@ -59,24 +57,18 @@ async def startup_task(app):
             logger.info(f"[Startup] Removed {dedupe['removed']} duplicate listing(s)")
 
         # Step 3: catch any orders that came in since last restart
-        from order_processor import poll_new_orders, process_pending_orders
+        from order_processor import poll_new_orders
         new_orders = poll_new_orders()
-        if new_orders:
-            await send(app, f"📬 *{len(new_orders)} order(s) found on startup!* Fulfilling now...")
-        order_results = await process_pending_orders()
-        for r in order_results:
-            if r["success"]:
-                await send(app, f"✅ *Order fulfilled!*\nBuyer: {r['buyer_name']}\nProfit: *${r['net_profit']:.2f}*")
-            else:
-                from bot import _esc
-                msg = f"❌ *Manual fulfillment needed*\nOrder: `{r['ebay_order_id']}`\nError: {r['error'][:80]}"
-                if r.get("buyer_address"):
-                    msg += f"\n\n📦 Ship to:\n{_esc(r['buyer_name'])}\n{_esc(r['buyer_address'])}"
-                if r.get("title"):
-                    msg += f"\n🛍 Item: {_esc(r['title'][:60])}"
-                await send(app, msg)
+        for o in new_orders:
+            await send(
+                app,
+                f"📬 *New order!* Profit: ${o['net_profit']:.2f}\n"
+                f"{_esc(o['title'][:50])}\n"
+                f"📦 Ship to: {_esc(o['buyer_name'])}\n{_esc(o['address'])}, {o['city']}, {o['state']} {o['zip']}\n\n"
+                f"→ /markshipped `{o['ebay_order_id']}` <tracking>"
+            )
 
-        await send(app, "🚀 Bot started. Use /research then /list to add new products.")
+        await send(app, "🚀 Bot started. Use /check then /instock to add new inventory.")
     except Exception as e:
         logger.error(f"[Startup] Error: {e}")
 
@@ -92,12 +84,11 @@ async def main():
         except telegram.error.Conflict:
             logger.warning("Another bot instance is running — exiting so Railway restarts cleanly")
             sys.exit(1)
-        logger.info("✅ Dropship bot running. Open Telegram and send /start")
+        logger.info("✅ Retail arbitrage bot running. Open Telegram and send /start")
 
         await asyncio.gather(
             startup_task(app),
             order_loop(app),
-            price_loop(app),
         )
 
 

@@ -16,20 +16,13 @@ EBAY_REFRESH_TOKEN = os.getenv("EBAY_REFRESH_TOKEN", "")
 
 EBAY_FINDING_URL = "https://svcs.ebay.com/services/search/FindingService/v1"
 
-# CJ Dropshipping (free at app.cjdropshipping.com)
-CJ_EMAIL = os.getenv("CJ_EMAIL", "")
-CJ_PASSWORD = os.getenv("CJ_PASSWORD", "")
-CJ_API_KEY = os.getenv("CJ_API_KEY", "")  # optional — from CJ dashboard → API page
-
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Profit settings
+# Profit settings (retail arbitrage — you buy clearance stock, eBay comps set the resale price)
 MIN_MARGIN_PERCENT = float(os.getenv("MIN_MARGIN_PERCENT", "25"))
-MARKUP_PERCENT = float(os.getenv("MARKUP_PERCENT", "70"))
 EBAY_FEE_PERCENT = float(os.getenv("EBAY_FEE_PERCENT", "15.5"))
+SHIP_COST_ESTIMATE = float(os.getenv("SHIP_COST_ESTIMATE", "6"))  # your own outbound shipping, added to cost
 MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "50"))  # stay under eBay's 250 free insertions/month
-RESEARCH_INTERVAL_HOURS = float(os.getenv("RESEARCH_INTERVAL_HOURS", "6"))
-PRICE_SYNC_INTERVAL_HOURS = float(os.getenv("PRICE_SYNC_INTERVAL_HOURS", "2"))
 ORDER_POLL_MINUTES = int(os.getenv("ORDER_POLL_MINUTES", "60"))

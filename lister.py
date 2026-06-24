@@ -397,21 +397,14 @@ async def list_ready_products(limit: int = 10) -> tuple[list[dict], str]:
     listed = []
     first_error = ""
 
-    from cj_client import get_product_images
-
     for p in products:
         title = _clean_title(p["title"])
         logger.info(f"Listing: {title[:60]}")
         category_id = get_suggested_category(title)
 
-        pid_match = re.search(r'-p-([A-Za-z0-9]+)\.html', p.get("cj_url", ""))
-        extra_imgs = get_product_images(pid_match.group(1)) if pid_match else []
         image_urls = []
         if p.get("image_url"):
             image_urls.append(p["image_url"])
-        for u in extra_imgs:
-            if u not in image_urls:
-                image_urls.append(u)
         if p.get("extra_images"):
             image_urls += [u.strip() for u in p["extra_images"].split(",") if u.strip() and u.strip() not in image_urls]
         image_urls = image_urls[:12]
@@ -419,6 +412,7 @@ async def list_ready_products(limit: int = 10) -> tuple[list[dict], str]:
         description = _build_description(title, image_urls)
         item_specifics = _build_item_specifics(title, category_id)
 
+        qty = max(1, p.get("qty_on_hand") or 1)
         ebay_item_id = None
         try:
             ebay_item_id = await create_listing(
@@ -427,7 +421,8 @@ async def list_ready_products(limit: int = 10) -> tuple[list[dict], str]:
                 price=p["ebay_price"],
                 image_urls=image_urls,
                 category_id=category_id,
-                variant_id=p.get("cj_variant_id", ""),
+                variant_id=p.get("sku", ""),
+                quantity=qty,
                 item_specifics=item_specifics,
             )
         except DuplicateListing:
@@ -443,7 +438,8 @@ async def list_ready_products(limit: int = 10) -> tuple[list[dict], str]:
                     price=p["ebay_price"],
                     image_urls=image_urls,
                     category_id="112581",
-                    variant_id=p.get("cj_variant_id", ""),
+                    variant_id=p.get("sku", ""),
+                    quantity=qty,
                     item_specifics=_build_item_specifics(title, "112581"),
                 )
             except EbayListingError as e:
@@ -473,14 +469,14 @@ async def list_ready_products(limit: int = 10) -> tuple[list[dict], str]:
             product_id=p["id"],
             ebay_item_id=ebay_item_id,
             ebay_price=p["ebay_price"],
-            cj_price=p["cj_price"],
+            cost_price=p["cost_price"],
         )
         mark_product_listed(p["id"])
         listed.append({
             "title": p["title"],
             "ebay_item_id": ebay_item_id,
             "ebay_price": p["ebay_price"],
-            "cj_price": p["cj_price"],
+            "cost_price": p["cost_price"],
             "margin_percent": p["margin_percent"],
         })
         logger.info(f"  ✅ Listed as eBay item {ebay_item_id} @ ${p['ebay_price']:.2f}")
